@@ -8,6 +8,6 @@ class CustomSlug extends SlugIT {
   }
 
   _addAbc(String text) {
-    return text + 'abc';
+    return text + '-abc';
   }
 }
