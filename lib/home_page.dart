@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_isolate/custom_slug.dart';
 import 'package:flutter_isolate/image_rotate.dart';
 import 'dart:isolate';
 
@@ -54,6 +55,10 @@ class _MyHomePageState extends State<MyHomePage> {
             const ImageRotate(),
             Text(
               '$_counter',
+              style: Theme.of(context).textTheme.headline4,
+            ),
+            Text(
+              CustomSlug().makeSlug("Hà nội"),
               style: Theme.of(context).textTheme.headline4,
             ),
           ],
