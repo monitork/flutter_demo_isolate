@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_isolate/base_isolate.dart';
 import 'package:flutter_isolate/custom_slug.dart';
 import 'package:flutter_isolate/image_rotate.dart';
 import 'dart:isolate';
@@ -82,18 +83,18 @@ class _MyHomePageState extends State<MyHomePage> {
     return compute(_sum, 1000000000);
   }
 
-  static void taskRunner(SendPort sendPort) {
+  static void taskRunner(BaseIsolateSend<int> send) {
     var receivePort = ReceivePort();
     receivePort.listen((message) {
       print("$message");
     });
     int total = 0;
-    for (var i = 0; i < 1000000; i++) {
+    for (var i = 0; i < send.message; i++) {
       total += i;
     }
     // print(receivePort.sendPort);
     // return total;
-    sendPort.send([total, receivePort.sendPort]);
+    send.sendPort.send([total, receivePort.sendPort]);
   }
 
   createNewIsolate() async {
@@ -107,8 +108,8 @@ class _MyHomePageState extends State<MyHomePage> {
 
     ReceivePort receivePort = ReceivePort();
     try {
-      Isolate newIsolate =
-          await Isolate.spawn(taskRunner, receivePort.sendPort);
+      Isolate newIsolate = await Isolate.spawn(
+          taskRunner, BaseIsolateSend<int>(receivePort.sendPort, 10000));
       Future.delayed(const Duration(milliseconds: 300), () {
         print("Go to kill");
         newIsolate.kill(priority: Isolate.immediate);
