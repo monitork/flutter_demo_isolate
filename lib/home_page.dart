@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_isolate/base_isolate.dart';
@@ -6,11 +8,12 @@ import 'package:flutter_isolate/image_rotate.dart';
 import 'dart:isolate';
 
 Future<int> _sum(int number) async {
+  print("Start $number");
   var total = 0;
   for (var i = 0; i < number; i++) {
     total += i;
   }
-  print("Finish");
+  print("Finish $number");
   return total;
 }
 
@@ -33,14 +36,6 @@ class MyHomePage extends StatefulWidget {
 }
 
 class _MyHomePageState extends State<MyHomePage> {
-  int _counter = 0;
-
-  void _incrementCounter() {
-    setState(() {
-      _counter++;
-    });
-  }
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -55,10 +50,6 @@ class _MyHomePageState extends State<MyHomePage> {
           children: <Widget>[
             const ImageRotate(),
             Text(
-              '$_counter',
-              style: Theme.of(context).textTheme.headline4,
-            ),
-            Text(
               CustomSlug().makeSlug("Hà nội"),
               style: Theme.of(context).textTheme.headline4,
             ),
@@ -67,10 +58,13 @@ class _MyHomePageState extends State<MyHomePage> {
       ),
       floatingActionButton: FloatingActionButton(
         onPressed: () async {
-          // sum().then((value) => print("Data $value"));
-          // createNewIsolate();
-          floatClick();
-          print("OK...");
+          // _sum(1000000000).then((value) => print("Data $value"));
+          // final result = await createNewIsolate();
+          createIsolate2();
+
+          // final result = await floatClick();
+          // print('[SHIN] ===> Main theart result $result');
+          // print("OK...");
           // Nên sử dụng với Feature builder để fetch dữ liệu async
         },
         tooltip: 'Increment',
@@ -79,25 +73,55 @@ class _MyHomePageState extends State<MyHomePage> {
     );
   }
 
-  floatClick() {
-    return compute(_sum, 1000000000);
-  }
+  Future<int> floatClick() => compute<int, int>(_sum, 1000000000);
 
   static void taskRunner(BaseIsolateSend<int> send) {
-    var receivePort = ReceivePort();
-    receivePort.listen((message) {
-      print("$message");
-    });
-    int total = 0;
-    for (var i = 0; i < send.message; i++) {
-      total += i;
-    }
+    // final receivePort = ReceivePort();
+    // receivePort.listen((message) {
+    //   print("[SHIN]: taskRunner $message");
+    // });
+    final total = _sum(1000000000);
     // print(receivePort.sendPort);
     // return total;
-    send.sendPort.send([total, receivePort.sendPort]);
+    send.sendPort.send([total, send.sendPort]);
   }
 
-  createNewIsolate() async {
+  static void taskRunner2<T>(SendPort sendPort) {
+    final receivePort = ReceivePort();
+    sendPort.send(receivePort.sendPort);
+    receivePort.listen((message) async {
+      print("[SHIN]: taskRunner $message");
+      // final total = _sum(1000000000);
+      if (message is Future<T>) {
+        T result = await message;
+        sendPort.send(result);
+      }
+    });
+    // print(receivePort.sendPort);
+    // return total;
+  }
+
+  Future<void> createIsolate2() async {
+    ReceivePort receivePort = ReceivePort();
+    late final Isolate newIsolate;
+    try {
+      newIsolate = await Isolate.spawn(taskRunner2<int>, receivePort.sendPort);
+    } catch (e) {
+      print(e.toString());
+    }
+    receivePort.listen((message) {
+      print("message $message");
+      if (message is SendPort) {
+        message.send(_sum(1000000000));
+      } else if (message is int) {
+        newIsolate.kill(priority: Isolate.immediate);
+        receivePort.close();
+      }
+    });
+  }
+
+  Future<int?> createNewIsolate() async {
+    final Completer<int?> _completer = Completer<int?>();
     // ở đây vẫn là main isolate => vẫn print ra được
     // truyền vào top function hoặc static function
     // topFunction là function ngang cấp main
@@ -105,25 +129,25 @@ class _MyHomePageState extends State<MyHomePage> {
     // message là giá trị truyền vào.
 
     // Để giao tiếp qua lại thì dùng Receive và sendPort
-
+    late final Isolate newIsolate;
     ReceivePort receivePort = ReceivePort();
     try {
-      Isolate newIsolate = await Isolate.spawn(
-          taskRunner, BaseIsolateSend<int>(receivePort.sendPort, 10000));
-      Future.delayed(const Duration(milliseconds: 300), () {
-        print("Go to kill");
-        newIsolate.kill(priority: Isolate.immediate);
-      });
+      newIsolate = await Isolate.spawn(taskRunner, BaseIsolateSend<int>(receivePort.sendPort, 1000000000));
     } catch (e) {
       print(e.toString());
+      _completer.complete(null);
     }
     // Đây chính là 1 stream ==> đưa vào rxdart được
     receivePort.listen((message) {
       print("Result ${message[0]}");
-      print(message[1] is SendPort);
       if (message[1] is SendPort) {
-        message[1].send("Send from Main Thread");
+        message[1].send("Send to Main Thread");
+        newIsolate.kill(priority: Isolate.immediate);
+        receivePort.close();
+        _completer.complete(message[0]);
       }
     });
+
+    return _completer.future;
   }
 }
